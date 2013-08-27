@@ -9,4 +9,4 @@ usage
 `groovy picreaper [imagename]`
 
 ![original image](tall.jpg "original image")
-![cropped image](tall.jpg "cropped image")
+![cropped image](160_tall.jpg "cropped image")
