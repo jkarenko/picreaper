@@ -10,3 +10,19 @@ usage
 
 ![original image](tall.jpg "original image")
 ![cropped image](160_tall.jpg "cropped image")
+
+![original image](wide.jpg "original image")
+![cropped image](160_wide.jpg "cropped image")
+
+
+features
+--------
+
+resizes and crops images to hardcoded format
+
+
+future features
+---------------
+
+- command line arguments
+- option to use as a class

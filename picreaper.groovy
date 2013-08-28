@@ -6,17 +6,13 @@ import java.awt.Graphics
 import java.awt.image.PixelGrabber
 import java.awt.image.ImageObserver
 
-ratio = 16/9
-width = 160
-height = (int)width/ratio
-
 for (a in this.args) {
 	handleImage(a)
 }
 
-def resize(img) {
+def resize(img, resizeWidth, resizeHeight) {
 	BufferedImage sourceImage = img;
-	Image thumbnail = sourceImage.getScaledInstance(width, -1, Image.SCALE_SMOOTH);
+	Image thumbnail = sourceImage.getScaledInstance(resizeWidth, resizeHeight, Image.SCALE_SMOOTH);
 	BufferedImage bufferedThumbnail = new BufferedImage(thumbnail.getWidth(null),
 		thumbnail.getHeight(null),
 		BufferedImage.TYPE_INT_RGB);
@@ -25,8 +21,8 @@ def resize(img) {
 }
 
 
-def cropImage(src, yPos, stepSize) {
-	BufferedImage dest = src.getSubimage(0, yPos, src.getWidth(), stepSize);
+def cropImage(src, xPos, yPos, xAmount, yAmount) {
+	BufferedImage dest = src.getSubimage(xPos, yPos, xAmount, yAmount);
 	return dest; 
 }
 
@@ -82,39 +78,80 @@ def saveImage(img) {
 
 
 def handleImage(file) {
+	ratio = 16/9
+	width = 160
+	height = (int)width/ratio
+
 	filename = file
 	image = new File(filename)
 	outputStream = new File("${width}_$filename")
 	imgStream = ImageIO.read(image)
 	
+	origHeight = imgStream.getHeight()
+	origWidth = imgStream.getWidth()
+
+	// decide whether to preserve height or width
+	if ((origWidth / origHeight) > ratio) {
+		resizeHeight = height
+		resizeWidth = -1
+	} 
+	else {
+		resizeHeight = -1
+		resizeWidth = width
+	}
+
 	stepSize = 20
 
 
-	// resize image
-	newImage = resize(imgStream)
+	// resize image now to speed up the rest of the process
+	newImage = resize(imgStream, resizeWidth, resizeHeight)
 
 
-	// entropy comparison and cropping
+	// entropy comparison and cropping for tall images
 	while(newImage.getHeight() > height) {
+		// copy the pixels of a $stepSize wide slice of the top and bottom of image and calculate entropy for both
 		sliceFromTop = handlepixels(newImage, 0, 0, newImage.getWidth(), stepSize)
 		sliceFromBottom = handlepixels(newImage, 0, (newImage.getHeight() - stepSize), newImage.getWidth(), stepSize)
 
+		// make sure we're not cropping too much out of the image
 		if (stepSize > newImage.getHeight() - height) {
 			stepSize = newImage.getHeight() - height
 		}
 
+		// see which sample slice has less entropy and throw that one away
 		if (sliceFromTop >= sliceFromBottom) {
 			msg = "slice from bottom"
-			newImage = cropImage(newImage, 0, (newImage.getHeight() - stepSize ))
+			newImage = cropImage(newImage, 0, 0, newImage.getWidth(), (newImage.getHeight() - stepSize ))
 		}
 		else {
 			msg = "slice from top"
-			newImage = cropImage(newImage, stepSize, newImage.getHeight() - stepSize)
+			newImage = cropImage(newImage, 0, stepSize, newImage.getWidth(), newImage.getHeight() - stepSize)
 		}
 
 		println filename + ": " + msg + ", " + newImage.getWidth() + " x " + newImage.getHeight() + ", (want " + width + " x " + height + ")"
 	}
 
-	// finally save the resized and cropped image
+	// entropy comparison and cropping for wide images
+	while(newImage.getWidth() > width) {
+		sliceFromLeft = handlepixels(newImage, 0, 0, stepSize, newImage.getHeight())
+		sliceFromRight = handlepixels(newImage, (newImage.getWidth() - stepSize), 0, stepSize, newImage.getHeight())
+
+		if (stepSize > newImage.getWidth() - width) {
+			stepSize = newImage.getWidth() - width
+		}
+
+		if (sliceFromRight >= sliceFromLeft) {
+			msg = "slice from left"
+			newImage = cropImage(newImage, stepSize, 0, (newImage.getWidth() - stepSize), newImage.getHeight())
+		}
+		else {
+			msg = "slice from right"
+			newImage = cropImage(newImage, 0, 0, (newImage.getWidth() - stepSize), newImage.getHeight())
+		}
+		
+		println filename + ": " + msg + ", " + newImage.getWidth() + " x " + newImage.getHeight() + ", (want " + width + " x " + height + ")"
+	}
+
+	// save the resized and cropped image
 	saveImage(newImage)
 }
