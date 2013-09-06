@@ -1,3 +1,4 @@
+
 import java.awt.Image;
 import java.awt.image.BufferedImage;
 import javax.imageio.ImageIO;
@@ -79,13 +80,18 @@ def saveImage(img) {
 
 def handleImage(file) {
 	ratio = 16/9
-	width = 160
+	width = 978
 	height = (int)width/ratio
 
 	filename = file
 	image = new File(filename)
 	outputStream = new File("${width}_$filename")
-	imgStream = ImageIO.read(image)
+	try {
+		imgStream = ImageIO.read(image)
+	} catch (javax.imageio.IIOException e) {
+		println "Bad image type, probably CMYK: " + filename
+		return null
+	}
 	
 	origHeight = imgStream.getHeight()
 	origWidth = imgStream.getWidth()
@@ -107,28 +113,53 @@ def handleImage(file) {
 	newImage = resize(imgStream, resizeWidth, resizeHeight)
 
 
+	previousTopEntropy = 0
+	previousBottomEntropy = 0
+
+	// put some variable factors to use
+	totalEntropy = handlepixels(newImage, 0, 0, newImage.getWidth(), newImage.getHeight())
+	entropyFactor = (1/totalEntropy)*15 < 1 ? 1 : (1/totalEntropy)*15
+	additionalFactor = 0.0
+	factorIncrement = 0.2
+
+	println filename
+	println "Total entropy is $totalEntropy"
+	println "Prefer top with factor of $entropyFactor"
+
 	// entropy comparison and cropping for tall images
 	while(newImage.getHeight() > height) {
-		// copy the pixels of a $stepSize wide slice of the top and bottom of image and calculate entropy for both
+		// copy the pixels of a $stepSize tall slice of the top and bottom of image and calculate entropy for both
 		sliceFromTop = handlepixels(newImage, 0, 0, newImage.getWidth(), stepSize)
 		sliceFromBottom = handlepixels(newImage, 0, (newImage.getHeight() - stepSize), newImage.getWidth(), stepSize)
+		// do the same for the next slices for averaging entropies
+		sliceFromTop2 = handlepixels(newImage, 0, stepSize, newImage.getWidth(), stepSize)
+		sliceFromBottom2 = handlepixels(newImage, 0, (newImage.getHeight() - stepSize*2), newImage.getWidth(), stepSize)
 
 		// make sure we're not cropping too much out of the image
 		if (stepSize > newImage.getHeight() - height) {
 			stepSize = newImage.getHeight() - height
 		}
 
-		// see which sample slice has less entropy and throw that one away
-		if (sliceFromTop >= sliceFromBottom) {
-			msg = "slice from bottom"
+		// see which sample slice has less average entropy and throw that one away
+		if (((Math.abs(sliceFromTop + sliceFromTop2)/2)*entropyFactor) + additionalFactor >= 
+											Math.abs(sliceFromBottom + sliceFromBottom2)/2) {			
+
+			msg = "remove from bottom"
 			newImage = cropImage(newImage, 0, 0, newImage.getWidth(), (newImage.getHeight() - stepSize ))
+			// previousTopEntropy = sliceFromTop
 		}
 		else {
-			msg = "slice from top"
+			msg = "remove from top"
 			newImage = cropImage(newImage, 0, stepSize, newImage.getWidth(), newImage.getHeight() - stepSize)
+			additionalFactor += factorIncrement
+			// previousBottomEntropy = sliceFromBottom
 		}
+		
+		
+		
+		
 
-		println filename + ": " + msg + ", " + newImage.getWidth() + " x " + newImage.getHeight() + ", (want " + width + " x " + height + ")"
+		println msg + ", " + newImage.getWidth() + " x " + newImage.getHeight() + ", (want " + width + " x " + height + ")"
 	}
 
 	// entropy comparison and cropping for wide images
@@ -141,15 +172,15 @@ def handleImage(file) {
 		}
 
 		if (sliceFromRight >= sliceFromLeft) {
-			msg = "slice from left"
+			msg = "remove from left"
 			newImage = cropImage(newImage, stepSize, 0, (newImage.getWidth() - stepSize), newImage.getHeight())
 		}
 		else {
-			msg = "slice from right"
+			msg = "remove from right"
 			newImage = cropImage(newImage, 0, 0, (newImage.getWidth() - stepSize), newImage.getHeight())
 		}
 		
-		println filename + ": " + msg + ", " + newImage.getWidth() + " x " + newImage.getHeight() + ", (want " + width + " x " + height + ")"
+		println msg + ", " + newImage.getWidth() + " x " + newImage.getHeight() + ", (want " + width + " x " + height + ")"
 	}
 
 	// save the resized and cropped image
